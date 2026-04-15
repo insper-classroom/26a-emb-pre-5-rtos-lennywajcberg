@@ -1,15 +1,7 @@
-/**
- * Copyright (c) 2020 Raspberry Pi (Trading) Ltd.
- *
- * SPDX-License-Identifier: BSD-3-Clause
- */
-
 #include <FreeRTOS.h>
 #include <task.h>
 #include <semphr.h>
 #include <queue.h>
-
-
 #include <stdio.h>
 #include <string.h> 
 #include "pico/stdlib.h"
@@ -19,29 +11,22 @@
 
 const int BTN_PIN_R = 28;
 const int BTN_PIN_Y = 21;
-
 const int LED_PIN_R = 5;
 const int LED_PIN_Y = 10;
 
-QueueHandle_t xQueueButId; 
-QueueHandle_t xQueueBtn2;
-
-SemaphoreHandle_t xSemaphore_r;
-SemaphoreHandle_t xSemaphore_y;
-
+QueueHandle_t xQueueBtn;          // uma fila só pra os dois botões
+SemaphoreHandle_t xSemaphoreLedR;
+SemaphoreHandle_t xSemaphoreLedY;
 
 int delay_red = 0;
 int delay_yel = 0;
 
 void btn_callback(uint gpio, uint32_t events) {
-    if (gpio == BTN_PIN_R)
-        xQueueSendFromISR(xQueueButId, &gpio, 0); // manda qual botão foi apertado
-    else if (gpio == BTN_PIN_Y)
-        xQueueSendFromISR(xQueueBtn2, &gpio, 0);
+    xQueueSendFromISR(xQueueBtn, &gpio, 0); // manda qual botão foi apertado
 }
 
 void btn_1_task(void* p) {
-    uint gpio = 0; // adiciona no início da função
+    uint gpio = 0;
     gpio_init(BTN_PIN_R);
     gpio_set_dir(BTN_PIN_R, GPIO_IN);
     gpio_pull_up(BTN_PIN_R);
@@ -51,19 +36,16 @@ void btn_1_task(void* p) {
     gpio_set_irq_enabled_with_callback(BTN_PIN_R, GPIO_IRQ_EDGE_FALL, true, &btn_callback);
     gpio_set_irq_enabled(BTN_PIN_Y, GPIO_IRQ_EDGE_FALL, true);
     while (true) {
-        if (xQueueReceive(xQueueButId, &gpio, 0)){
+        if (xQueueReceive(xQueueBtn, &gpio, pdMS_TO_TICKS(100))) {
             if (gpio == BTN_PIN_R) {
                 delay_red += 100;
+                if (delay_red > 200) delay_red = 100;
+                xSemaphoreGive(xSemaphoreLedR);
+            } else if (gpio == BTN_PIN_Y) {
+                delay_yel += 100;
+                if (delay_yel > 200) delay_yel = 100;
+                xSemaphoreGive(xSemaphoreLedY);
             }
-            if (delay_red > 200) delay_red = 100;
-            xSemaphoreGive(xSemaphore_r);
-        }
-        else if (xQueueReceive(xQueueBtn2, &gpio, 0)){
-            if (gpio == BTN_PIN_Y) {
-                delay_yel = 100;
-            }
-            if (delay_yel > 200) delay_yel = 100;
-            xSemaphoreGive(xSemaphore_y);
         }
     }
 }
@@ -71,12 +53,9 @@ void btn_1_task(void* p) {
 void led_1_task(void *p) {
     gpio_init(LED_PIN_R);
     gpio_set_dir(LED_PIN_R, GPIO_OUT);
-    bool piscando = false; // começa apagado
+    bool piscando = false;
     while (true) {
-        // checa se botão foi apertado, sem bloquear (timeout 0)
-        if (xSemaphoreTake(xSemaphore_r, 0) == pdTRUE) {
-            // delay=100 significa 1º aperto → liga
-            // delay=200 significa 2º aperto → desliga
+        if (xSemaphoreTake(xSemaphoreLedR, 0) == pdTRUE) {
             piscando = (delay_red == 100);
         }
         if (piscando) {
@@ -85,8 +64,8 @@ void led_1_task(void *p) {
             gpio_put(LED_PIN_R, 0);
             vTaskDelay(pdMS_TO_TICKS(100));
         } else {
-            gpio_put(LED_PIN_R, 0); // garante que fica apagado
-            vTaskDelay(pdMS_TO_TICKS(10)); // evita busy wait
+            gpio_put(LED_PIN_R, 0);
+            vTaskDelay(pdMS_TO_TICKS(10));
         }
     }
 }
@@ -94,10 +73,9 @@ void led_1_task(void *p) {
 void led_2_task(void *p) {
     gpio_init(LED_PIN_Y);
     gpio_set_dir(LED_PIN_Y, GPIO_OUT);
-    bool piscando = false; // começa apagado
+    bool piscando = false;
     while (true) {
-        // mesma lógica do LED vermelho, mas com semáforo e delay do amarelo
-        if (xSemaphoreTake(xSemaphore_y, 0) == pdTRUE) {
+        if (xSemaphoreTake(xSemaphoreLedY, 0) == pdTRUE) {
             piscando = (delay_yel == 100);
         }
         if (piscando) {
@@ -114,10 +92,9 @@ void led_2_task(void *p) {
 
 int main() {
     stdio_init_all();
-    xQueueButId = xQueueCreate(32, sizeof(int));
-    xQueueBtn2 = xQueueCreate(32, sizeof(int));
-    xSemaphore_r = xSemaphoreCreateBinary();
-    xSemaphore_y = xSemaphoreCreateBinary();
+    xQueueBtn = xQueueCreate(32, sizeof(int));
+    xSemaphoreLedR = xSemaphoreCreateBinary();
+    xSemaphoreLedY = xSemaphoreCreateBinary();
 
     xTaskCreate(led_1_task, "LED_Task 1", 256, NULL, 1, NULL);
     xTaskCreate(btn_1_task, "BTN_Task 1", 256, NULL, 1, NULL);
@@ -125,10 +102,5 @@ int main() {
     vTaskStartScheduler();
 
     while(1){}
-
     return 0;
 }
-
-
-
-
