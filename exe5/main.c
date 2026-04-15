@@ -56,14 +56,14 @@ void btn_1_task(void* p) {
                 delay_red += 100;
             }
             if (delay_red > 1000) delay_red = 100;
-            xSemaphoreGive(xSemaphore_r, 0);
+            xSemaphoreGive(xSemaphore_r);
         }
         else if (xQueueReceive(xQueueBtn2, &gpio, 0)){
             if (gpio == BTN_PIN_Y) {
                 delay_yel += 100;
-            }  
+            }
             if (delay_yel > 1000) delay_yel = 100;
-            xSemaphoreGive(xSemaphore_y, 0);
+            xSemaphoreGive(xSemaphore_y);
         }
     }
 }
