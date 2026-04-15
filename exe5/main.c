@@ -35,9 +35,9 @@ int delay_yel = 0;
 
 void btn_callback(uint gpio, uint32_t events) {
     if (gpio == BTN_PIN_R)
-        xQueueSend(xQueueButId, &gpio, 0); // manda qual botão foi apertado
+        xQueueSendFromISR(xQueueButId, &gpio, 0); // manda qual botão foi apertado
     else if (gpio == BTN_PIN_Y)
-        xQueueSend(xQueueBtn2, &gpio, 0);
+        xQueueSendFromISR(xQueueBtn2, &gpio, 0);
 }
 
 void btn_1_task(void* p) {
@@ -55,14 +55,14 @@ void btn_1_task(void* p) {
             if (gpio == BTN_PIN_R) {
                 delay_red += 100;
             }
-            if (delay_red > 1000) delay_red = 100;
+            if (delay_red > 200) delay_red = 100;
             xSemaphoreGive(xSemaphore_r);
         }
         else if (xQueueReceive(xQueueBtn2, &gpio, 0)){
             if (gpio == BTN_PIN_Y) {
-                delay_yel += 100;
+                delay_yel = 100;
             }
-            if (delay_yel > 1000) delay_yel = 100;
+            if (delay_yel > 200) delay_yel = 100;
             xSemaphoreGive(xSemaphore_y);
         }
     }
@@ -71,33 +71,46 @@ void btn_1_task(void* p) {
 void led_1_task(void *p) {
     gpio_init(LED_PIN_R);
     gpio_set_dir(LED_PIN_R, GPIO_OUT);
+    bool piscando = false; // começa apagado
     while (true) {
-        if (xSemaphoreTake(xSemaphore_r, pdMS_TO_TICKS(500)) == pdTRUE){
-            if (delay_red > 0) {
-                gpio_put(LED_PIN_R, 1);
-                vTaskDelay(pdMS_TO_TICKS(delay_red));
-                gpio_put(LED_PIN_R, 0);
-                vTaskDelay(pdMS_TO_TICKS(delay_red));
-            }
-        }         
+        // checa se botão foi apertado, sem bloquear (timeout 0)
+        if (xSemaphoreTake(xSemaphore_r, 0) == pdTRUE) {
+            // delay=100 significa 1º aperto → liga
+            // delay=200 significa 2º aperto → desliga
+            piscando = (delay_red == 100);
+        }
+        if (piscando) {
+            gpio_put(LED_PIN_R, 1);
+            vTaskDelay(pdMS_TO_TICKS(100));
+            gpio_put(LED_PIN_R, 0);
+            vTaskDelay(pdMS_TO_TICKS(100));
+        } else {
+            gpio_put(LED_PIN_R, 0); // garante que fica apagado
+            vTaskDelay(pdMS_TO_TICKS(10)); // evita busy wait
+        }
     }
 }
 
 void led_2_task(void *p) {
     gpio_init(LED_PIN_Y);
     gpio_set_dir(LED_PIN_Y, GPIO_OUT);
+    bool piscando = false; // começa apagado
     while (true) {
-        if (xSemaphoreTake(xSemaphore_y, pdMS_TO_TICKS(500)) == pdTRUE){
-            if (delay_yel > 0) {
-                gpio_put(LED_PIN_Y, 1);
-                vTaskDelay(pdMS_TO_TICKS(delay_yel));
-                gpio_put(LED_PIN_Y, 0);
-                vTaskDelay(pdMS_TO_TICKS(delay_yel));
-            }
-        }         
+        // mesma lógica do LED vermelho, mas com semáforo e delay do amarelo
+        if (xSemaphoreTake(xSemaphore_y, 0) == pdTRUE) {
+            piscando = (delay_yel == 100);
+        }
+        if (piscando) {
+            gpio_put(LED_PIN_Y, 1);
+            vTaskDelay(pdMS_TO_TICKS(100));
+            gpio_put(LED_PIN_Y, 0);
+            vTaskDelay(pdMS_TO_TICKS(100));
+        } else {
+            gpio_put(LED_PIN_Y, 0);
+            vTaskDelay(pdMS_TO_TICKS(10));
+        }
     }
 }
-
 
 int main() {
     stdio_init_all();
