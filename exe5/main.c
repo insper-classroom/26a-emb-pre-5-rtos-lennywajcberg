@@ -18,14 +18,15 @@ QueueHandle_t xQueueBtn;          // uma fila só pra os dois botões
 SemaphoreHandle_t xSemaphoreLedR;
 SemaphoreHandle_t xSemaphoreLedY;
 
-int delay_red = 0;
-int delay_yel = 0;
+
 
 void btn_callback(uint gpio, uint32_t events) {
     xQueueSendFromISR(xQueueBtn, &gpio, 0); // manda qual botão foi apertado
 }
 
 void btn_1_task(void* p) {
+    int delay_red = 0;
+    int delay_yel = 0;
     uint gpio = 0;
     gpio_init(BTN_PIN_R);
     gpio_set_dir(BTN_PIN_R, GPIO_IN);
