@@ -13,11 +13,17 @@ const int LED_PIN_R = 4;
 const int LED_PIN_G = 6;
 
 QueueHandle_t xQueueButId;
+QueueHandle_t xQueueVerde;
 SemaphoreHandle_t xSemaphore_r;
+SemaphoreHandle_t xSemaphore_g;
+
 
 void btn_callback(uint gpio, uint32_t events) {
-    if (events == 0x4) { // fall edge
+    if (gpio == BTN_PIN_R) {
         xSemaphoreGiveFromISR(xSemaphore_r, 0);
+    }
+    else if(gpio == BTN_PIN_G) {
+         xSemaphoreGiveFromISR(xSemaphore_g, 0);
     }
 }
 
@@ -58,6 +64,26 @@ void btn_1_task(void *p) {
             }
             printf("delay btn %d \n", delay);
             xQueueSend(xQueueButId, &delay, 0);
+        }
+    }
+}
+
+void led_2_task(void *p) {
+    gpio_init(LED_PIN_G);
+    gpio_set_dir(LED_PIN_G, GPIO_OUT);
+
+    int delay = 0;
+
+    while (true) {
+        if (xQueueReceive(xQueueVerde, &delay, 0)) {
+            printf("%d\n", delay);
+        }
+        
+        if (delay > 0) {
+            gpio_put(LED_PIN_R, 1);
+            vTaskDelay(pdMS_TO_TICKS(delay));
+            gpio_put(LED_PIN_R, 0);
+            vTaskDelay(pdMS_TO_TICKS(delay));
         }
     }
 }
