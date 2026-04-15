@@ -14,18 +14,18 @@ const int BTN_PIN_Y = 21;
 const int LED_PIN_R = 5;
 const int LED_PIN_Y = 10;
 
-QueueHandle_t xQueueBtn;          // uma fila só pra os dois botões
+QueueHandle_t xQueueBtn;
+QueueHandle_t xQueueStateLedR;
+QueueHandle_t xQueueStateLedY;
 SemaphoreHandle_t xSemaphoreLedR;
 SemaphoreHandle_t xSemaphoreLedY;
 
-
-
 void btn_callback(uint gpio, uint32_t events) {
-    xQueueSendFromISR(xQueueBtn, &gpio, 0); // manda qual botão foi apertado
+    xQueueSendFromISR(xQueueBtn, &gpio, 0);
 }
 
 void btn_1_task(void* p) {
-    int delay_red = 0;
+    int delay_red = 0; // local, não reseta
     int delay_yel = 0;
     uint gpio = 0;
     gpio_init(BTN_PIN_R);
@@ -41,10 +41,14 @@ void btn_1_task(void* p) {
             if (gpio == BTN_PIN_R) {
                 delay_red += 100;
                 if (delay_red > 200) delay_red = 100;
+                bool state = (delay_red == 100); // true = ligar, false = desligar
+                xQueueSend(xQueueStateLedR, &state, 0);
                 xSemaphoreGive(xSemaphoreLedR);
             } else if (gpio == BTN_PIN_Y) {
                 delay_yel += 100;
                 if (delay_yel > 200) delay_yel = 100;
+                bool state = (delay_yel == 100);
+                xQueueSend(xQueueStateLedY, &state, 0);
                 xSemaphoreGive(xSemaphoreLedY);
             }
         }
@@ -54,10 +58,10 @@ void btn_1_task(void* p) {
 void led_1_task(void *p) {
     gpio_init(LED_PIN_R);
     gpio_set_dir(LED_PIN_R, GPIO_OUT);
-    bool piscando = false;
+    bool piscando = false; // local
     while (true) {
         if (xSemaphoreTake(xSemaphoreLedR, 0) == pdTRUE) {
-            piscando = (delay_red == 100);
+            xQueueReceive(xQueueStateLedR, &piscando, 0); // recebe true/false
         }
         if (piscando) {
             gpio_put(LED_PIN_R, 1);
@@ -74,10 +78,10 @@ void led_1_task(void *p) {
 void led_2_task(void *p) {
     gpio_init(LED_PIN_Y);
     gpio_set_dir(LED_PIN_Y, GPIO_OUT);
-    bool piscando = false;
+    bool piscando = false; // local
     while (true) {
         if (xSemaphoreTake(xSemaphoreLedY, 0) == pdTRUE) {
-            piscando = (delay_yel == 100);
+            xQueueReceive(xQueueStateLedY, &piscando, 0);
         }
         if (piscando) {
             gpio_put(LED_PIN_Y, 1);
@@ -94,6 +98,8 @@ void led_2_task(void *p) {
 int main() {
     stdio_init_all();
     xQueueBtn = xQueueCreate(32, sizeof(int));
+    xQueueStateLedR = xQueueCreate(4, sizeof(bool));
+    xQueueStateLedY = xQueueCreate(4, sizeof(bool));
     xSemaphoreLedR = xSemaphoreCreateBinary();
     xSemaphoreLedY = xSemaphoreCreateBinary();
 
