@@ -13,6 +13,8 @@ const int LED_PIN_R = 4;
 const int LED_PIN_G = 6;
 
 SemaphoreHandle_t xSemaphore_r;
+SemaphoreHandle_t xSemaphore_g;
+
 
 void led_1_task(void *p) {
   gpio_init(LED_PIN_R);
@@ -39,7 +41,7 @@ void led_2_task(void *p) {
 
   while (true) {
 
-    if (xSemaphoreTake(xSemaphore_r, pdMS_TO_TICKS(500)) == pdTRUE) { 
+    if (xSemaphoreTake(xSemaphore_g, pdMS_TO_TICKS(500)) == pdTRUE) { 
       gpio_put(LED_PIN_G, 1);
       vTaskDelay(pdMS_TO_TICKS(delay));
       gpio_put(LED_PIN_G, 0);
@@ -73,7 +75,7 @@ void btn_2_task(void *p) {
       while (!gpio_get(BTN_PIN_G)) {
         vTaskDelay(pdMS_TO_TICKS(1));
       }
-      xSemaphoreGive(xSemaphore_r);
+      xSemaphoreGive(xSemaphore_g);
     }
   }
 }
